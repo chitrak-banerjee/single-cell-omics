@@ -1,4 +1,4 @@
-name: usb
+name: sco
 channels:
   - defaults
 dependencies:
