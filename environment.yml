@@ -181,4 +181,4 @@ dependencies:
     - wfdb==4.1.2
     - xmltodict==0.13.0
     - zipp==3.17.0
-prefix: /home/aditya/anaconda3/envs/usb
+prefix: /home/aditya/anaconda3/envs/sco
