@@ -186,8 +186,7 @@ class Generic_WSI_Classification_Dataset(Dataset):
 			print('Slide-LVL; Number of samples registered in class %d: %d' % (i, self.slide_cls_ids[i].shape[0]))
 
 	def create_splits(self, k = 3, test_num = (40, 40), label_frac = 1.0, custom_test_ids = None):
-		settings = {'n_splits' : k, 
-			    #'val_num' : val_num, 
+		settings = {'n_splits' : k,
 			    'test_num': test_num,
 			    'label_frac': label_frac,
 			    'seed': self.seed,
