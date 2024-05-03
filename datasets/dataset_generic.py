@@ -41,6 +41,31 @@ def save_splits(split_datasets, column_keys, filename, boolean_style=False):
 	df.to_csv(filename)
 	print()
 
+def create_cv_folds(dataset, args):
+    num_slides_cls = np.array([len(cls_ids) for cls_ids in dataset.patient_cls_ids])
+    test_num = np.round( num_slides_cls * args.cv_test ).astype(int)
+    if args.cv_equal:
+        test_num = [min(test_num)]*len(test_num)
+    dataset.create_splits(k = args.cv_folds,
+                          test_num = test_num,
+                          label_frac = args.cv_train)
+    
+    for f in range(args.cv_folds):
+        dataset.set_splits()
+        descriptor_df = dataset.test_split_gen( return_descriptor=True )
+        splits = dataset.return_splits( from_id=True )
+        filename = 'folds/{}_{}_{}'.format(
+            int(100 * args.cv_test), args.cv_folds, f
+        )
+        save_splits( splits, ['train', 'test'], os.path.join(
+            args.tmp_dir, filename + '.csv') )
+        save_splits( splits, ['train', 'test'], os.path.join(
+            args.tmp_dir, filename + '_bool' + '.csv'
+        ), boolean_style=True )
+        descriptor_df.to_csv( os.path.join(
+            args.tmp_dir, filename + '_descriptor' + '.csv'
+        ) )                      
+    
 class Generic_WSI_Classification_Dataset(Dataset):
 	def __init__(self,
 		csv_path = 'dataset_csv/ccrcc_clean.csv',
@@ -73,6 +98,8 @@ class Generic_WSI_Classification_Dataset(Dataset):
 		if not label_col:
 			label_col = 'label'
 		self.label_col = label_col
+		self.patient_cls_ids = [[] for i in range(self.num_classes)]
+		self.slide_cls_ids = [[] for i in range(self.num_classes)]
 
 		slide_data = pd.read_csv(csv_path)
 		slide_data = self.filter_df(slide_data, filter_dict)
@@ -92,15 +119,13 @@ class Generic_WSI_Classification_Dataset(Dataset):
 			self.summarize()
 
 	def cls_ids_prep(self):
-		# store ids corresponding each class at the patient or case level
-		self.patient_cls_ids = [[] for i in range(self.num_classes)]		
+		"""
+		patient_cls_ids: Store ids corresponding each class at the patient or case level
+		slide_cls_ids: Store ids corresponding each class at the slide level
+		"""
 		for i in range(self.num_classes):
-			self.patient_cls_ids[i] = np.where(self.patient_data['label'] == i)[0]
-
-		# store ids corresponding each class at the slide level
-		self.slide_cls_ids = [[] for i in range(self.num_classes)]
-		for i in range(self.num_classes):
-			self.slide_cls_ids[i] = np.where(self.slide_data['label'] == i)[0]
+		    self.patient_cls_ids[i] = np.where(self.patient_data['label'] == i)[0]
+		    self.slide_cls_ids[i] = np.where(self.slide_data['label'] == i)[0]       
 
 	def patient_data_prep(self, patient_voting='max'):
 		patients = np.unique(np.array(self.slide_data['case_id'])) # get unique patients
@@ -161,14 +186,11 @@ class Generic_WSI_Classification_Dataset(Dataset):
 			print('Slide-LVL; Number of samples registered in class %d: %d' % (i, self.slide_cls_ids[i].shape[0]))
 
 	def create_splits(self, k = 3, test_num = (40, 40), label_frac = 1.0, custom_test_ids = None):
-		settings = {
-					'n_splits' : k, 
-					#'val_num' : val_num, 
-					'test_num': test_num,
-					'label_frac': label_frac,
-					'seed': self.seed,
-					'custom_test_ids': custom_test_ids
-					}
+		settings = {'n_splits' : k,
+			    'test_num': test_num,
+			    'label_frac': label_frac,
+			    'seed': self.seed,
+			    'custom_test_ids': custom_test_ids}
 
 		if self.patient_strat:
 			settings.update({'cls_ids' : self.patient_cls_ids, 'samples': len(self.patient_data['case_id'])})
@@ -367,5 +389,3 @@ class Generic_Split(Generic_MIL_Dataset):
 	def __len__(self):
 		return len(self.slide_data)
 		
-
-

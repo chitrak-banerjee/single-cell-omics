@@ -2,8 +2,8 @@ import numpy as np
 import torch
 from utils.utils import *
 import os
-from datasets.dataset_generic import save_splits
-#from models.model_mil import MIL_fc, MIL_fc_mc
+# from datasets.dataset_generic import save_splits
+# from models.model_mil import MIL_fc, MIL_fc_mc
 from models.model_clam import CLAM_MB, CLAM_SB
 from sklearn.preprocessing import label_binarize
 from sklearn.metrics import roc_auc_score, roc_curve
@@ -92,11 +92,11 @@ def train(datasets, cur, args):
 		train for a single fold
 	"""
 	print('\nTraining Fold {}!'.format(cur))
-	writer_dir = os.path.join(args['results_dir'].item(), str(cur))
+	writer_dir = os.path.join(args.output_dir, str(cur))
 	if not os.path.isdir(writer_dir):
 		os.mkdir(writer_dir)
 
-	if args['log_data'].item():
+	if args.log_data:
 		from tensorboardX import SummaryWriter
 		writer = SummaryWriter(writer_dir, flush_secs=15)
 
@@ -114,25 +114,25 @@ def train(datasets, cur, args):
 		test_split = None
 	else:
 		train_split, val_split, test_split = datasets
-	''' ## RL
-	train_split, test_split = datasets ## JO
-	if args['cv_test'].item() > 0:
+	if args.cv_test > 0:
                 save_splits([ train_split, test_split ],
 				[ 'train', 'test' ],
 				os.path.join( args['results_dir'].item(), 'splits_{}.csv'.format(cur) ))
 	else:
                 save_splits([ train_split],
 				[ 'train'],
-				os.path.join( args['results_dir'].item(), 'splits_{}.csv'.format(cur) ))
+				os.path.join( args['results_dir'].item(), 'splits_{}.csv'.format(cur) ))	
+	''' ## RL
+	train_split, test_split = datasets ## JO
 	
 	print('Done!')
 	print("Training on {} samples".format(len(train_split)))
-	print("Testing on {} samples".format(len(test_split) if args['cv_test'].item() > 0 else 0))
+	print("Testing on {} samples".format(len(test_split) if args.cv_test > 0 else 0))
 
 	print('\nInit loss function...', end=' ')
-	if args['bag_loss'].item() == 'svm':
+	if args.bag_loss == 'svm':
 		from topk.svm import SmoothTop1SVM
-		loss_fn = SmoothTop1SVM(n_classes = args['n_classes'].item())
+		loss_fn = SmoothTop1SVM(n_classes = args.num_classes)
 		if device.type == 'cuda':
 			loss_fn = loss_fn.cuda()
 	else:
@@ -140,21 +140,21 @@ def train(datasets, cur, args):
 	print('Done!')
 	
 	print('\nInit Model...', end=' ')
-	model_dict = {"dropout": args['drop_out'].item(), 'n_classes': args['n_classes'].item()}
-	if args['model_type'].item() == 'clam' and args['subtyping'].item():
+	model_dict = {"dropout": args.drop_out, 'n_classes': args.num_classes}
+	if args.model_type == 'clam' and args.subtyping:
 		model_dict.update({'subtyping': True})
 	
-	if args['model_size'].item() is not None and args['model_type'].item() != 'mil':
-		model_dict.update({"size_arg": args['model_size'].item()})
+	if args.model_size is not None and args.model_type != 'mil':
+		model_dict.update({"size_arg": args.model_size})
 	
-	if args['model_type'].item() in ['clam_sb', 'clam_mb']:
-		if args['subtyping'].item():
+	if args.model_type in ['clam_sb', 'clam_mb']:
+		if args.subtyping:
 			model_dict.update({'subtyping': True})
 		
-		if args['B'].item() > 0:
-			model_dict.update({'k_sample': args['B'].item()})
+		if args.B > 0:
+			model_dict.update({'k_sample': args.B})
 		
-		if args['inst_loss'].item() == 'svm':
+		if args.inst_loss == 'svm':
 			from topk.svm import SmoothTop1SVM
 			instance_loss_fn = SmoothTop1SVM(n_classes = 2)
 			if device.type == 'cuda':
@@ -162,15 +162,15 @@ def train(datasets, cur, args):
 		else:
 			instance_loss_fn = nn.CrossEntropyLoss()
 		
-		if args['model_type'].item() =='clam_sb':
+		if args.model_type =='clam_sb':
 			model = CLAM_SB(**model_dict, instance_loss_fn=instance_loss_fn)
-		elif args['model_type'].item() == 'clam_mb':
+		elif args.model_type == 'clam_mb':
 			model = CLAM_MB(**model_dict, instance_loss_fn=instance_loss_fn)
 		else:
 			raise NotImplementedError
 	
 	else: # args.model_type == 'mil'
-		if args['n_classes'].item() > 2:
+		if args.num_classes > 2:
 			model = MIL_fc_mc(**model_dict)
 		else:
 			model = MIL_fc(**model_dict)
@@ -184,13 +184,14 @@ def train(datasets, cur, args):
 	print('Done!')
 	
 	print('\nInit Loaders...', end=' ')
-	train_loader = get_split_loader(train_split, training=True, testing = args['testing'].item(), weighted = args['weighted_sample'].item())
-	if args['cv_test'].item() > 0:
-		test_loader = get_split_loader(test_split, testing = args['testing'].item())
+	train_loader = get_split_loader(train_split, training=True, testing = args.testing, weighted = args.weighted_sample)
+	
+	if args.cv_test > 0:
+		test_loader = get_split_loader(test_split, testing = args.testing)
 	print('Done!')
 
 	print('\nSetup EarlyStopping...', end=' ')
-	if args['early_stopping'].item():
+	if args.early_stopping:
 		early_stopping = EarlyStopping(patience = 20, stop_epoch=50, verbose = True)
 
 	else:
@@ -205,25 +206,25 @@ def train(datasets, cur, args):
 	test_auc_vec = []
 
 	
-	for epoch in range(args['max_epochs'].item()):
+	for epoch in range(args.epochs):
 		## diagnosis
 		print('epoch:' + str(epoch))
-		if args['model_type'].item() in ['clam_sb', 'clam_mb'] and not args['no_inst_cluster'].item():	 
-			train_loop_clam(epoch, model, train_loader, optimizer, args['n_classes'].item(), args['bag_weight'].item(), writer, loss_fn)
+		if args.model_type in ['clam_sb', 'clam_mb'] and not args.no_inst_cluster:	 
+			train_loop_clam(epoch, model, train_loader, optimizer, args.num_classes, args.bag_weight, writer, loss_fn)
 			# if not args.train_only: ## RL
-			if args['cv_test'].item() > 0: ## JO
-				stop = validate_clam(cur, epoch, model, test_loader, args['n_classes'].item(), 
-									 early_stopping, writer, loss_fn, args['results_dir'].item())
+			if args.cv_test > 0: ## JO
+				stop = validate_clam(cur, epoch, model, test_loader, args.num_classes, 
+									 early_stopping, writer, loss_fn, args.output_dir)
 			else:
 				stop = False
 
 			###
-			_, train_error, train_auc, _ = summary(model, train_loader, args['n_classes'].item())
+			_, train_error, train_auc, _ = summary(model, train_loader, args.num_classes)
 			train_acc_vec.append( 1- train_error )
 			train_auc_vec.append( train_auc )
 			###
-			if args['cv_test'].item() > 0:
-				_, test_error, test_auc, _ = summary(model, test_loader, args['n_classes'].item())
+			if args.cv_test > 0:
+				_, test_error, test_auc, _ = summary(model, test_loader, args.num_classes)
 				test_acc_vec.append( 1- test_error )
 				test_auc_vec.append( test_auc )
 			else:
@@ -233,9 +234,9 @@ def train(datasets, cur, args):
 		else:
 			train_loop(epoch, model, train_loader, optimizer, args.n_classes, writer, loss_fn)
 			# if not args.train_only: ## RL
-			if args['cv_test'].item() > 0: ## JO
-				stop = validate(cur, epoch, model, test_loader, args['n_classes'].item(), 
-								early_stopping, writer, loss_fn, args['results_dir'].item())
+			if args.cv_test > 0: ## JO
+				stop = validate(cur, epoch, model, test_loader, args.num_classes, 
+								early_stopping, writer, loss_fn, args.output_dir)
 			else:
 				stop = False
 		
@@ -246,20 +247,20 @@ def train(datasets, cur, args):
 			break
 	
 	if stopping_epoch == 0:
-		stopping_epoch = args['max_epochs'].item()
+		stopping_epoch = args.epochs
 	
-	if not args['early_stopping'].item():
-		stopping_epoch = args['max_epochs'].item()
+	if not args.early_stopping:
+		stopping_epoch = args.epochs
 
-	if args['early_stopping'].item():
-		model.load_state_dict(torch.load(os.path.join(args['results_dir'].item(), "s_{}_checkpoint.pt".format(cur))))
+	if args.early_stopping:
+		model.load_state_dict(torch.load(os.path.join(args.output_dir, "s_{}_checkpoint.pt".format(cur))))
 	else:
-		torch.save(model.state_dict(), os.path.join(args['results_dir'].item(), "s_{}_checkpoint.pt".format(cur)))
+		torch.save(model.state_dict(), os.path.join(args.output_dir, "s_{}_checkpoint.pt".format(cur)))
 	
 		
-	results_dict_train, train_error, train_auc, acc_logger = summary(model, train_loader, args['n_classes'].item())
+	results_dict_train, train_error, train_auc, acc_logger = summary(model, train_loader, args.num_classes)
 	print('Train error: {:.4f}, ROC AUC: {:.4f}'.format(train_error, train_auc))
-	for i in range(args['n_classes'].item()):
+	for i in range(args.num_classes):
 		acc, correct, count = acc_logger.get_summary(i)
 		print('class {}: acc {}, correct {}/{}'.format(i, acc, correct, count))
 
@@ -274,10 +275,10 @@ def train(datasets, cur, args):
 	train_acc = 1 - train_error
 		
 
-	if args['cv_test'].item() > 0:
-		results_dict_test, test_error, test_auc, acc_logger = summary(model, test_loader, args['n_classes'].item())
+	if args.cv_test > 0:
+		results_dict_test, test_error, test_auc, acc_logger = summary(model, test_loader, args.num_classes)
 		print('Test error: {:.4f}, ROC AUC: {:.4f}'.format(test_error, test_auc))
-		for i in range(args['n_classes'].item()):
+		for i in range(args.num_classes):
 			acc, correct, count = acc_logger.get_summary(i)
 			print('class {}: acc {}, correct {}/{}'.format(i, acc, correct, count))
 
