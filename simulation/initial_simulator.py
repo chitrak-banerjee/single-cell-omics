@@ -1,11 +1,9 @@
-### Updated Python Code:
-
 import numpy as np
 import pandas as pd
 
 
 def simulate_data(num_disease, num_control, disease_lambda_range, control_lambda_range, disease_binary_prob,
-                  control_binary_prob, num_features_1, num_features_2):
+                  control_binary_prob, num_features_1, num_features_2, num_features_3):
     # Generate indices for individuals in both groups
     disease_indices = np.arange(num_disease)
     control_indices = np.arange(num_control)
@@ -81,6 +79,25 @@ def simulate_data(num_disease, num_control, disease_lambda_range, control_lambda
     for i, feature_values in enumerate(features_2):
         combined_df[f'feature_{num_features_1 + i + 1}'] = feature_values
 
+    # Simulate the third set of feature values based on the binary variable
+    features_3 = []
+    for _ in range(num_features_3):
+        feature_values = []
+        for binary_value in combined_df['binary_variable']:
+            if binary_value == 1:
+                n = np.random.poisson(5) + 1  # Poisson distribution for the first parameter, ensuring n > 0
+                p = np.random.beta(5, 2)  # Beta distribution for the second parameter
+            else:
+                n = np.random.poisson(5) + 1  # Poisson distribution for the first parameter, ensuring n > 0
+                p = np.random.beta(5, 2)  # Beta distribution for the second parameter
+            feature_value = np.random.negative_binomial(n=n, p=p)
+            feature_values.append(feature_value)
+        features_3.append(feature_values)
+
+    # Add the second set of feature values to the DataFrame
+    for i, feature_values in enumerate(features_3):
+        combined_df[f'feature_{num_features_1 + num_features_2 + i + 1}'] = feature_values
+
     return combined_df
 
 
@@ -91,9 +108,10 @@ def simulate_data(num_disease, num_control, disease_lambda_range, control_lambda
 # control_lambda_range = (3, 10)  # Range of Poisson parameters for control group
 # disease_binary_prob = 0.7  # Probability of binary variable being 1 for disease group
 # control_binary_prob = 0.4  # Probability of binary variable being 1 for control group
-# num_features_1 = 500  # Number of features to simulate with lower mean for binary variable 1
-# num_features_2 = 500  # Number of features to simulate with higher mean for binary variable 1
-#
-# # Simulate data
+# num_features_1 = 50  # Number of features to simulate with lower mean for binary variable 1
+# num_features_2 = 50  # Number of features to simulate with higher mean for binary variable 1
+# num_features_3 = 900  # Number of features to simulate with same mean for binary variable 1
+
+# Simulate data
 # simulated_data = simulate_data(num_disease, num_control, disease_lambda_range, control_lambda_range,
-#                                disease_binary_prob, control_binary_prob, num_features_1, num_features_2)
+#                                disease_binary_prob, control_binary_prob, num_features_1, num_features_2, num_features_3)
